@@ -65,7 +65,7 @@ namespace MinerKiller
                 }
                 if (modCount > 2)
                 {
-                    Logger.Log("Miner Found - Process: " + p.ProcessName + ".exe, ProcessId: " + p.Id);
+                    Logger.LogWarn("Miner Found - Process: " + p.ProcessName + ".exe, ProcessId: " + p.Id);
                     var tiedConnections = cons.Where(x => x.ProcessId == p.Id);
                     var badPorts = tiedConnections.Where(x => _PortList.Any(y => y == x.RemotePort));
                     foreach (var conn in badPorts)
@@ -120,7 +120,7 @@ namespace MinerKiller
 
                     if (exitStatus != "0")
                     {
-                        Logger.LogError("error reading tcp connections");
+                        Logger.LogError("Failed reading TCP connections.");
                         return null;
                     }
 
