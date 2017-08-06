@@ -3,10 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Net.NetworkInformation;
-using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 
 namespace MinerKiller
 {
@@ -28,6 +25,7 @@ namespace MinerKiller
             7777,
             5555
         };
+
         private static string[] _Nvidia = new[]
         {
             "nvcompiler.dll",
@@ -41,6 +39,9 @@ namespace MinerKiller
         //todo: amd libraries
         static void Main(string[] args)
         {
+            WaterMark();
+            
+            Logger.Log("Scanning started...");
 
             var cons = GetConnections();
             
@@ -51,7 +52,7 @@ namespace MinerKiller
                 {
                     ProcessModule t = p.Modules[0];
                 }
-                catch (Exception e){
+                catch (Exception){
                     continue;           
                 }
 
@@ -64,19 +65,29 @@ namespace MinerKiller
                 }
                 if (modCount > 2)
                 {
-                    Console.WriteLine("POSSIBLE MINING PROCESS FOUND: " + p.ProcessName);
+                    Logger.Log("Miner Found - Process: " + p.ProcessName + ".exe, ProcessId: " + p.Id);
                     var tiedConnections = cons.Where(x => x.ProcessId == p.Id);
                     var badPorts = tiedConnections.Where(x => _PortList.Any(y => y == x.RemotePort));
                     foreach (var conn in badPorts)
                     {
-                        Console.WriteLine(conn);
+                        Logger.LogSuccess("\t" + conn);
                     }
                     p.Kill();
                 }
             }
-            Console.WriteLine("done");
+            Logger.Log("Finished.");
             Console.Read();
 
+        }
+
+        private static void WaterMark()
+        {
+            Console.WriteLine(@"    __  ____                 __ __ _ ____         ");
+            Console.WriteLine(@"   /  |/  (_)___  ___  _____/ //_/(_) / /__  _____");
+            Console.WriteLine(@"  / /|_/ / / __ \/ _ \/ ___/ ,<  / / / / _ \/ ___/");
+            Console.WriteLine(@" / /  / / / / / /  __/ /  / /| |/ / / /  __/ /    ");
+            Console.WriteLine(@"/_/  /_/_/_/ /_/\___/_/  /_/ |_/_/_/_/\___/_/     ");
+            Console.WriteLine("\t\tby: Adam Roach\r\n");
         }
         // Adapted from
         // http://www.cheynewallace.com/get-active-ports-and-associated-process-names-in-c/
@@ -109,8 +120,8 @@ namespace MinerKiller
 
                     if (exitStatus != "0")
                     {
-                        Console.WriteLine("error reading tcp connections");
-                        throw new Exception();
+                        Logger.LogError("error reading tcp connections");
+                        return null;
                     }
 
                     string[] rows = Regex.Split(content, "\r\n");
