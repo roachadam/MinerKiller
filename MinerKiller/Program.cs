@@ -36,7 +36,9 @@ namespace MinerKiller
             "nvapi64.dll",
             "OpenCL.dll"
         };
-        //todo: b_amd
+
+        private static string[] _Amd = new[] { ""};
+        //todo: amd libraries
         static void Main(string[] args)
         {
 
