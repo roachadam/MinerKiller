@@ -1,9 +1,11 @@
 ﻿using System;
+using System.CodeDom;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Management;
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 
 namespace MinerKiller
@@ -24,7 +26,8 @@ namespace MinerKiller
             3333,
             13333,
             7777,
-            5555
+            5555,
+            9980
         };
 
         private string[] _Nvidia = new[]
@@ -38,14 +41,11 @@ namespace MinerKiller
 
         private string[] _Amd = new[] { "" };
 
-        
-        //todo: amd libraries
-        public MinerKiller()
-        {
-            
+        [DllImport("kernel32", SetLastError = true)]
+        private static extern bool AttachConsole(uint dwProcessId);
 
-        }
-
+        [DllImport("kernel32.dll")]
+        static extern bool GetConsoleMode(IntPtr hConsoleHandle, out uint lpMode);
         public void Scan()
         {
             // Get processes with active TCP connections
@@ -53,7 +53,10 @@ namespace MinerKiller
 
             foreach (Process p in GetProcesses())
             {
-                int level = 0; // Number to describe the likelihood a process being a miner.
+                Logger.Log("Scanning process: " + p.ProcessName + ".exe");
+
+
+                double riskLevel = 0; // Number to describe the likelihood a process being a miner.
                 int modCount = 0;
                 foreach (ProcessModule pMod in p.Modules)
                 {
@@ -67,42 +70,81 @@ namespace MinerKiller
                 if (modCount > 2)
                 {
                     Logger.LogWarn("Potential Miner Found - Process: " + p.ProcessName + ".exe, ProcessId: " + p.Id);
-                    level += 1;
+                    riskLevel += 2;
                 }
-                
+                else
+                {
+                    continue; // todo: determine if this should be the "all" factor
+                }
+
+
                 // Check tcp connections associated with suspect process
                 var tiedConnections = cons.Where(x => x.ProcessId == p.Id);
                 var badPorts = tiedConnections.Where(x => _PortList.Any(y => y == x.RemotePort));
                 foreach (var conn in badPorts)
                 {
                     Logger.Log("\t" + conn);
-                    level += 1;
+                    riskLevel += 1;
                 }
 
 
                 // Check commandline arguments of suspect process
                 var args = GetCommandLine(p);
 
-                // If commandline contains active tcp port, increase level by 2
-                foreach(var conn in badPorts)
+                // If commandline contains blacklisted/active tcp port, increase level by 1/2
+                if (args != null)
                 {
-                    if (args.Contains(conn.RemotePort.ToString()))
+                    foreach (var port in _PortList)
                     {
-                        level += 2;
-                        Logger.Log("\tActive TCP Port in CMD Args: " + conn.RemotePort);
+                        bool portActive = badPorts.Any(x => x.RemotePort == port);
+                        if (portActive && args.Contains(port.ToString()))
+                        {
+                            riskLevel += 2;
+                            Logger.Log("\tBlacklisted Active Port in CMD Args: " + port);
+                        }
+                        else if (args.Contains(port.ToString()))
+                        {
+                            riskLevel += 1;
+                            Logger.Log("\tBlacklisted Port in CMD Args: " + port);
+                        }
                     }
-                        
+                    if (args.Contains("pool"))
+                    {
+                        riskLevel += .5;
+                        Logger.Log("\t\"Pool\" in CMD Args.");
+                    }
+                    // checks if cmdline cointains "YOUR_ADDRESS.YOUR_WORKER_NAME/EMAIL" format
+                    // TODO: HORRIBLE REGEX PLEASE LEARN IT AND FIX
+                    var match = Regex.Match(args, @"\w+\.\w+\/\w+\@\w+\.\w+");
+
+                    if (match.Success)
+                    {
+                        riskLevel += 1;
+                        Logger.Log("\tConfig Data in CMD Args: " + match.Value);
+                    }
                 }
 
 
-                
-                if (level >= 2)
+                // TODO: needs work, this isn't acurate
+                if (p.MainWindowHandle == IntPtr.Zero )
                 {
-                    Logger.Log("\tProcess Warning Level: " + level);
+                    riskLevel += 2;
+                    Logger.Log("\tProcess Window is hidden.");
+                }
+                
+                if (riskLevel >= 3.5)
+                {
+                    Logger.Log("\tRisk Level: " + riskLevel);
                     try
                     {
                         p.Kill();
-                        Logger.LogSuccess("Successfully killed Silent Miner: " + p.ProcessName + ".exe!");
+                        if(p.HasExited)
+                            Logger.LogSuccess("Successfully killed Silent Miner: " + p.ProcessName + ".exe!");
+                        else
+                        {
+                            throw new Exception("Process killing failed.");
+                            
+                        }
                     }
                     catch (Exception e)
                     {
